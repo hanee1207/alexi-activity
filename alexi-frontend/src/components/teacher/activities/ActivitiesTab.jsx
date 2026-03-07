@@ -185,50 +185,6 @@ function speak(text, rate = 0.85) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LLM Question Generator
-// ─────────────────────────────────────────────────────────────────────────────
-async function generateLLMQuestions(activityId, difficulty, count = 6) {
-  const prompts = {
-    9: `Generate ${count} picture guess questions for kindergarten kids at ${difficulty} difficulty.
-Each question is a single common word that has a well-known emoji (animal, fruit, vehicle, object).
-Return ONLY a JSON array of strings, no explanation, no markdown. Example: ["Dog","Cat","Apple"]
-Make every run different — randomize the list. Difficulty guide: easy=animals/fruits, medium=vehicles/food, hard=less common objects.`,
-
-    10: `Generate ${count} counting questions for kindergarten kids at ${difficulty} difficulty.
-Return ONLY a JSON array of objects, no explanation, no markdown.
-For easy/medium: {"display":"🍎🍎🍎","answer":"3","count":3}
-For hard (addition): {"display":"🐶🐶 + 🐶🐶🐶","answer":"5","addend1":2,"addend2":3}
-Use different emojis each time. Randomize. Easy: count 2-5, Medium: count 6-10, Hard: addition up to 10.`,
-
-    11: `Generate ${count} pattern completion questions for kindergarten kids at ${difficulty} difficulty.
-Return ONLY a JSON array of objects, no explanation, no markdown.
-Format: {"pattern":"🔴 → 🔵 → 🔴 → ?","answer":"Blue","hint":"Blue"}
-Easy: simple AB emoji patterns. Medium: ABC patterns or number sequences (1,2,3,?). Hard: skip counting or decreasing sequences.
-Make every run completely different patterns.`,
-  };
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompts[activityId] }],
-      }),
-    });
-    const data = await res.json();
-    const text = data?.content?.[0]?.text || '';
-    const clean = text.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-  } catch (e) {
-    console.warn('LLM question gen failed, using fallback:', e);
-  }
-  return null;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Special renderers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -318,7 +274,6 @@ function PatternCard({ item, mimiSaying, phase, listening, transcript }) {
 function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   const wordSet = ACTIVITY_WORDS[activity.id]?.[difficulty] || ACTIVITY_WORDS[activity.id]?.easy || ['Hello'];
   const [words, setWords]               = useState(wordSet);
-  const [questionsReady, setQuestionsReady] = useState(![9,10,11].includes(activity.id));
   const total = words.length;
 
   const [phase,          setPhase]          = useState('waiting');
@@ -349,22 +304,11 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   const resultTimerRef  = useRef(null);
   const sessionEndedRef = useRef(false);
   const isPausedRef     = useRef(false);
-  // ✅ FIX: Track whether we already processed an answer for this question
   const answeredRef     = useRef(false);
 
   useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
   useEffect(() => { correctRef.current = correct; }, [correct]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
-
-  // ── Fetch LLM questions for activities 9, 10, 11 on mount ─────────────────
-  useEffect(() => {
-    if (![9, 10, 11].includes(activity.id)) return;
-    setQuestionsReady(false);
-    generateLLMQuestions(activity.id, difficulty, 6).then(generated => {
-      if (generated && generated.length > 0) setWords(generated);
-      setQuestionsReady(true);
-    });
-  }, [activity.id, difficulty]); // eslint-disable-line
 
   function getWordLabel(item) {
     if (typeof item === 'string') return item;
@@ -430,7 +374,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     setStarsEarned(0);
     setStudentName('');
     setMimiVideo(mimiIdleVideo);
-    answeredRef.current = false; // ✅ FIX: reset answered flag
+    answeredRef.current = false;
     setPhase('waiting');
     startCameraPoll();
     setTimeout(() => {
@@ -478,7 +422,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     if (phase !== 'asking') return;
     if (isPausedRef.current) return;
 
-    // ✅ FIX: Reset answered flag every time a new question is asked
     answeredRef.current = false;
 
     const item = words[current];
@@ -513,7 +456,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     const item   = words[current];
     const answer = getAnswer(item);
 
-    // ✅ FIX: No SR support — do NOT auto-pass. Mark as no answer heard.
     if (!SR) {
       setMimiSaying('🎤 Microphone not supported on this browser');
       const t = setTimeout(() => {
@@ -529,12 +471,11 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
 
     rec.onstart = () => setListening(true);
 
-    // ✅ FIX: onresult — mark answered, clear onend/onerror to prevent double-fire
     rec.onresult = (e) => {
       const s = e.results[0][0].transcript.trim();
       setTranscript(s);
       setListening(false);
-      rec.onend  = null; // prevent double-fire
+      rec.onend  = null;
       rec.onerror = null;
       if (!answeredRef.current) {
         answeredRef.current = true;
@@ -542,33 +483,30 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
       }
     };
 
-    // ✅ FIX: onend only fires if no result received yet
     rec.onend = () => {
       setListening(false);
       if (!answeredRef.current) {
         answeredRef.current = true;
-        sendToLLM(answer, ''); // nothing heard = wrong
+        sendToLLM(answer, '');
       }
     };
 
-    // ✅ FIX: onerror — treat as no answer
     rec.onerror = () => {
       setListening(false);
       if (!answeredRef.current) {
         answeredRef.current = true;
-        sendToLLM(answer, ''); // error = wrong
+        sendToLLM(answer, '');
       }
     };
 
     try { rec.start(); } catch (e) { console.warn('SR start error:', e); }
     recogRef.current = rec;
 
-    // ✅ FIX: Timeout — stop listening, send empty if not answered
     const t = setTimeout(() => {
       try { rec.stop(); } catch {}
       if (!answeredRef.current) {
         answeredRef.current = true;
-        sendToLLM(answer, ''); // timeout = wrong
+        sendToLLM(answer, '');
       }
     }, 7000);
 
@@ -578,14 +516,10 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     };
   }, [phase, current]); // eslint-disable-line
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // ✅ CORE FIX: sendToLLM — reject empty/silence immediately
-  // ─────────────────────────────────────────────────────────────────────────
   async function sendToLLM(word, childSaid) {
     setPhase('checking');
     setMimiSaying('Mimi is thinking… 🧠');
 
-    // ✅ FIX 1: Nothing heard at all — mark wrong immediately, skip LLM
     const heard = (childSaid || '').trim();
     if (!heard) {
       const msg = `Oops! Nothing heard. The answer was ${word}! Try next time! 💪`;
@@ -609,7 +543,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
       setLlmFeedback(msg);
       handleResult(ok, msg);
     } catch {
-      // ✅ FIX 2: Fallback — use strict local check (no empty-string passes)
       const ok  = checkAnswerLocally(word, heard);
       const msg = ok
         ? `Wonderful! ${word} is correct! 🌟`
@@ -619,10 +552,9 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     }
   }
 
-  // ✅ FIX: Strict local answer check — empty string always returns false
   function checkAnswerLocally(word, childSaid) {
     const heard = (childSaid || '').trim().toLowerCase();
-    if (!heard) return false; // ← this is the key guard
+    if (!heard) return false;
     const expected = word.toLowerCase();
     return heard.includes(expected) || expected.includes(heard);
   }
@@ -774,19 +706,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${bgImage})` }}>
-
-      {/* LLM loading screen
-      {!questionsReady && (
-        <div className="absolute inset-0 z-50 bg-black/60 flex items-center justify-center">
-          <motion.div initial={{ scale:0.8 }} animate={{ scale:1 }}
-            className="bg-white rounded-3xl px-12 py-10 shadow-2xl border-4 border-purple-300 text-center max-w-sm">
-            <motion.div animate={{ rotate:360 }} transition={{ duration:1.2, repeat:Infinity, ease:'linear' }}
-              className="text-6xl mb-4 inline-block">🧠</motion.div>
-            <h2 className="text-2xl font-black text-purple-700 mb-2">Mimi is preparing</h2>
-            <p className="text-purple-500 text-sm">Generating fresh questions just for you…</p>
-          </motion.div>
-        </div>
-      )} */}
 
       {/* Difficulty badge */}
       <div className="absolute top-6 right-6 z-50">
