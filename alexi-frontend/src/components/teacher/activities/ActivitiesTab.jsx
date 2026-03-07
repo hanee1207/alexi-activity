@@ -58,7 +58,6 @@ const WORD_EMOJIS = {
 
 // ── Activity word sets (difficulty-aware) ─────────────────────────────────────
 const ACTIVITY_WORDS = {
-  // ── Original 1-6 ──────────────────────────────────────────────────────────
   1: {
     easy:   ['Apple','Ball','Cat','Dog','Hat','Rat'],
     medium: ['Elephant','Fish','Goat','Igloo','Kite','Nest','Owl'],
@@ -89,7 +88,6 @@ const ACTIVITY_WORDS = {
     medium: ['Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen'],
     hard:   ['Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen','Twenty','Thirty'],
   },
-  // ── New 7-12 ──────────────────────────────────────────────────────────────
   7: {
     easy:   ['Head','Eye','Ear','Nose','Mouth','Hand','Leg','Foot'],
     medium: ['Hair','Teeth','Tongue','Shoulder','Arm','Finger','Knee','Ankle'],
@@ -100,8 +98,6 @@ const ACTIVITY_WORDS = {
     medium: ['Star','Oval','Heart','Diamond'],
     hard:   ['Pentagon','Hexagon','Octagon','Cylinder','Cone'],
   },
-  // Activities 9-12 handled specially (see MimiActivityOverlay)
-  // Activities 9, 10, 11 use LLM-generated questions — these are FALLBACK only
   9: {
     easy:   ['Dog','Cat','Cow','Lion','Tiger','Rabbit','Duck','Bear'],
     medium: ['Apple','Banana','Mango','Orange','Grapes','Strawberry','Pineapple','Watermelon'],
@@ -178,7 +174,6 @@ const ACTIVITY_WORDS = {
   },
 };
 
-// Difficulty label shown per activity
 const DIFFICULTY_LABELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
 function speak(text, rate = 0.85) {
@@ -190,7 +185,7 @@ function speak(text, rate = 0.85) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LLM Question Generator — generates fresh questions for activities 9, 10, 11
+// LLM Question Generator
 // ─────────────────────────────────────────────────────────────────────────────
 async function generateLLMQuestions(activityId, difficulty, count = 6) {
   const prompts = {
@@ -230,14 +225,13 @@ Make every run completely different patterns.`,
   } catch (e) {
     console.warn('LLM question gen failed, using fallback:', e);
   }
-  return null; // fallback to static list
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Special renderers for new activity types
+// Special renderers
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Activity 9 — Picture Guess: show big emoji, no text label
 function PictureGuessCard({ word, mimiSaying, phase, listening, transcript }) {
   const emoji = WORD_EMOJIS[word] || '🖼️';
   return (
@@ -262,7 +256,6 @@ function PictureGuessCard({ word, mimiSaying, phase, listening, transcript }) {
   );
 }
 
-// Activity 10 — Counting Game
 function CountingCard({ item, mimiSaying, phase, listening, transcript }) {
   const isAddition = item?.addend1 !== undefined;
   return (
@@ -296,7 +289,6 @@ function CountingCard({ item, mimiSaying, phase, listening, transcript }) {
   );
 }
 
-// Activity 11 — Pattern Fun
 function PatternCard({ item, mimiSaying, phase, listening, transcript }) {
   return (
     <div className="flex flex-col items-center gap-5 max-w-md">
@@ -321,45 +313,46 @@ function PatternCard({ item, mimiSaying, phase, listening, transcript }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MimiActivityOverlay — supports all 12 activities + difficulty levels
+// MimiActivityOverlay
 // ─────────────────────────────────────────────────────────────────────────────
 function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   const wordSet = ACTIVITY_WORDS[activity.id]?.[difficulty] || ACTIVITY_WORDS[activity.id]?.easy || ['Hello'];
-  const [words, setWords]         = useState(wordSet);
+  const [words, setWords]               = useState(wordSet);
   const [questionsReady, setQuestionsReady] = useState(![9,10,11].includes(activity.id));
   const total = words.length;
 
-  const [phase,       setPhase]       = useState('waiting');
-  const [studentName, setStudentName] = useState('');
-  const [mimiVideo,   setMimiVideo]   = useState(mimiIdleVideo);
-  const [current,     setCurrent]     = useState(0);
-  const [correct,     setCorrect]     = useState(0);
-  const [transcript,  setTranscript]  = useState('');
-  const [listening,   setListening]   = useState(false);
-  const [mimiSaying,  setMimiSaying]  = useState('');
-  const [isCorrect,   setIsCorrect]   = useState(null);
-  const [starsEarned, setStarsEarned] = useState(0);
-  const [llmFeedback, setLlmFeedback] = useState('');
-  const [showWarning, setShowWarning] = useState(false);
-  const [warningMsg,  setWarningMsg]  = useState('');
-  const [countdown,   setCountdown]   = useState(5);
+  const [phase,          setPhase]          = useState('waiting');
+  const [studentName,    setStudentName]    = useState('');
+  const [mimiVideo,      setMimiVideo]      = useState(mimiIdleVideo);
+  const [current,        setCurrent]        = useState(0);
+  const [correct,        setCorrect]        = useState(0);
+  const [transcript,     setTranscript]     = useState('');
+  const [listening,      setListening]      = useState(false);
+  const [mimiSaying,     setMimiSaying]     = useState('');
+  const [isCorrect,      setIsCorrect]      = useState(null);
+  const [starsEarned,    setStarsEarned]    = useState(0);
+  const [llmFeedback,    setLlmFeedback]    = useState('');
+  const [showWarning,    setShowWarning]    = useState(false);
+  const [warningMsg,     setWarningMsg]     = useState('');
+  const [countdown,      setCountdown]      = useState(5);
   const [sessionResults, setSessionResults] = useState([]);
   const [isPaused,       setIsPaused]       = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [sessionEnded,   setSessionEnded]   = useState(false);
 
-  const recogRef   = useRef(null);
-  const correctRef = useRef(0);
-  const pollRef    = useRef(null);
-  const phaseRef   = useRef('waiting');
-  const seenRef    = useRef(new Set());
+  const recogRef        = useRef(null);
+  const correctRef      = useRef(0);
+  const pollRef         = useRef(null);
+  const phaseRef        = useRef('waiting');
+  const seenRef         = useRef(new Set());
   const pausedPhaseRef  = useRef(null);
   const resultTimerRef  = useRef(null);
   const sessionEndedRef = useRef(false);
   const isPausedRef     = useRef(false);
+  // ✅ FIX: Track whether we already processed an answer for this question
+  const answeredRef     = useRef(false);
 
   useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
-
   useEffect(() => { correctRef.current = correct; }, [correct]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
@@ -373,7 +366,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     });
   }, [activity.id, difficulty]); // eslint-disable-line
 
-  // Helper: get word/item label for display
   function getWordLabel(item) {
     if (typeof item === 'string') return item;
     if (item?.answer) return item.answer;
@@ -381,7 +373,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     return '';
   }
 
-  // Helper: get correct answer for LLM/check
   function getAnswer(item) {
     if (typeof item === 'string') return item;
     if (item?.answer) return item.answer;
@@ -439,6 +430,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     setStarsEarned(0);
     setStudentName('');
     setMimiVideo(mimiIdleVideo);
+    answeredRef.current = false; // ✅ FIX: reset answered flag
     setPhase('waiting');
     startCameraPoll();
     setTimeout(() => {
@@ -485,21 +477,22 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   useEffect(() => {
     if (phase !== 'asking') return;
     if (isPausedRef.current) return;
+
+    // ✅ FIX: Reset answered flag every time a new question is asked
+    answeredRef.current = false;
+
     const item = words[current];
     let msg = '';
 
     if (activity.id === 9) {
-      // Picture Guess — no text hint
       msg = `Look carefully… what do you see?`;
     } else if (activity.id === 10) {
-      // Counting
       if (item?.addend1 !== undefined) {
         msg = `Count them all and tell me the total!`;
       } else {
         msg = `Count the items and tell me how many!`;
       }
     } else if (activity.id === 11) {
-      // Pattern
       msg = `What comes next in the pattern?`;
     } else {
       const label = getWordLabel(item);
@@ -514,71 +507,160 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   useEffect(() => {
     if (phase !== 'listening') return;
     if (isPausedRef.current) return;
+
     setMimiSaying('I am listening… 👂');
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const item   = words[current];
     const answer = getAnswer(item);
 
-    if (!SR) { setTimeout(() => sendToLLM(answer, answer), 1000); return; }
+    // ✅ FIX: No SR support — do NOT auto-pass. Mark as no answer heard.
+    if (!SR) {
+      setMimiSaying('🎤 Microphone not supported on this browser');
+      const t = setTimeout(() => {
+        if (!answeredRef.current) sendToLLM(answer, '');
+      }, 5000);
+      return () => clearTimeout(t);
+    }
+
     const rec = new SR();
-    rec.lang = 'en-IN'; rec.continuous = false; rec.interimResults = false;
-    rec.onstart  = () => setListening(true);
-    rec.onend    = () => setListening(false);
-    rec.onresult = (e) => { const s = e.results[0][0].transcript.trim(); setTranscript(s); sendToLLM(answer, s); };
-    rec.onerror  = () => sendToLLM(answer, '');
-    rec.start(); recogRef.current = rec;
-    const t = setTimeout(() => { try { rec.stop(); } catch {} sendToLLM(answer, ''); }, 7000);
-    return () => { clearTimeout(t); try { rec.stop(); } catch {} };
+    rec.lang = 'en-IN';
+    rec.continuous = false;
+    rec.interimResults = false;
+
+    rec.onstart = () => setListening(true);
+
+    // ✅ FIX: onresult — mark answered, clear onend/onerror to prevent double-fire
+    rec.onresult = (e) => {
+      const s = e.results[0][0].transcript.trim();
+      setTranscript(s);
+      setListening(false);
+      rec.onend  = null; // prevent double-fire
+      rec.onerror = null;
+      if (!answeredRef.current) {
+        answeredRef.current = true;
+        sendToLLM(answer, s);
+      }
+    };
+
+    // ✅ FIX: onend only fires if no result received yet
+    rec.onend = () => {
+      setListening(false);
+      if (!answeredRef.current) {
+        answeredRef.current = true;
+        sendToLLM(answer, ''); // nothing heard = wrong
+      }
+    };
+
+    // ✅ FIX: onerror — treat as no answer
+    rec.onerror = () => {
+      setListening(false);
+      if (!answeredRef.current) {
+        answeredRef.current = true;
+        sendToLLM(answer, ''); // error = wrong
+      }
+    };
+
+    try { rec.start(); } catch (e) { console.warn('SR start error:', e); }
+    recogRef.current = rec;
+
+    // ✅ FIX: Timeout — stop listening, send empty if not answered
+    const t = setTimeout(() => {
+      try { rec.stop(); } catch {}
+      if (!answeredRef.current) {
+        answeredRef.current = true;
+        sendToLLM(answer, ''); // timeout = wrong
+      }
+    }, 7000);
+
+    return () => {
+      clearTimeout(t);
+      try { rec.stop(); } catch {}
+    };
   }, [phase, current]); // eslint-disable-line
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // ✅ CORE FIX: sendToLLM — reject empty/silence immediately
+  // ─────────────────────────────────────────────────────────────────────────
   async function sendToLLM(word, childSaid) {
     setPhase('checking');
     setMimiSaying('Mimi is thinking… 🧠');
+
+    // ✅ FIX 1: Nothing heard at all — mark wrong immediately, skip LLM
+    const heard = (childSaid || '').trim();
+    if (!heard) {
+      const msg = `Oops! Nothing heard. The answer was ${word}! Try next time! 💪`;
+      setLlmFeedback(msg);
+      handleResult(false, msg);
+      return;
+    }
+
     try {
       const res = await axios.post(API_ENDPOINTS.ACTIVITY_CHECK, {
-        word, child_said: childSaid, activity_name: activity.name, student_name: studentName,
+        word,
+        child_said: heard,
+        activity_name: activity.name,
+        student_name: studentName,
       });
       const r   = res.data?.result;
-      const ok  = r?.correct  ?? childSaid.toLowerCase().includes(word.toLowerCase());
-      const msg = r?.feedback ?? (ok ? `Wonderful! ${word} is correct! 🌟` : `Never mind! The answer was ${word}`);
-      setLlmFeedback(msg); handleResult(ok, msg);
+      const ok  = r?.correct ?? checkAnswerLocally(word, heard);
+      const msg = r?.feedback ?? (ok
+        ? `Wonderful! ${word} is correct! 🌟`
+        : `Never mind! The answer was ${word}! Keep trying! 💪`);
+      setLlmFeedback(msg);
+      handleResult(ok, msg);
     } catch {
-      const ok  = childSaid.toLowerCase().includes(word.toLowerCase());
-      const msg = ok ? `Wonderful! ${word} is correct! 🌟` : `Never mind! The answer was ${word}`;
-      setLlmFeedback(msg); handleResult(ok, msg);
+      // ✅ FIX 2: Fallback — use strict local check (no empty-string passes)
+      const ok  = checkAnswerLocally(word, heard);
+      const msg = ok
+        ? `Wonderful! ${word} is correct! 🌟`
+        : `Never mind! The answer was ${word}! Keep trying! 💪`;
+      setLlmFeedback(msg);
+      handleResult(ok, msg);
     }
+  }
+
+  // ✅ FIX: Strict local answer check — empty string always returns false
+  function checkAnswerLocally(word, childSaid) {
+    const heard = (childSaid || '').trim().toLowerCase();
+    if (!heard) return false; // ← this is the key guard
+    const expected = word.toLowerCase();
+    return heard.includes(expected) || expected.includes(heard);
   }
 
   function handleResult(ok, feedback) {
     const nc = correctRef.current + (ok ? 1 : 0);
     if (ok) { setCorrect(nc); correctRef.current = nc; }
-    setIsCorrect(ok); setMimiSaying(feedback); speak(feedback); setPhase('result');
+    setIsCorrect(ok);
+    setMimiSaying(feedback);
+    speak(feedback);
+    setPhase('result');
     clearTimeout(resultTimerRef.current);
     resultTimerRef.current = setTimeout(() => {
-      if (sessionEndedRef.current) return; // session ended — don't advance
+      if (sessionEndedRef.current) return;
       if (current + 1 < total) {
-        setCurrent(c => c + 1); setIsCorrect(null); setTranscript(''); setLlmFeedback(''); setPhase('asking');
-      } else { finishStudent(nc); }
+        setCurrent(c => c + 1);
+        setIsCorrect(null);
+        setTranscript('');
+        setLlmFeedback('');
+        setPhase('asking');
+      } else {
+        finishStudent(nc);
+      }
     }, 3500);
   }
 
   function finishStudent(fc, isEarly = false, skipTransition = false) {
     const attempted = isEarly ? Math.max(current, 1) : total;
     const score     = Math.round((fc / attempted) * 100);
-    // Stars: divide questions into 5 equal groups, each group = 1 star
-    // Group size = ceil(total / 5)
-    // 15q: groups of 3 → 1-3=1⭐, 4-6=2⭐, 7-9=3⭐, 10-12=4⭐, 13-15=5⭐
-    // 6q:  groups of 2 → but last group gets 5⭐ if all correct
-    // Special: if fc === total → always 5 stars (full marks = full stars)
     const groupSize = Math.ceil(total / 5);
-    const earned = fc === 0 ? 0 : fc === total ? 5 : Math.min(5, Math.ceil(fc / groupSize));
+    const earned    = fc === 0 ? 0 : fc === total ? 5 : Math.min(5, Math.ceil(fc / groupSize));
     setStarsEarned(earned);
     setPhase('done');
     const msg = earned === 0
       ? `Good try ${studentName}! Keep practicing! 💪`
       : `Well done ${studentName}! You earned ${earned} star${earned !== 1 ? 's' : ''}! 🎉`;
     setMimiSaying(msg);
-    if (!skipTransition) speak(msg); // don't speak — end session already said "Well done [name]!"
+    if (!skipTransition) speak(msg);
     seenRef.current.add(studentName.toLowerCase());
     onStudentDone({ stars: earned, score, correct: fc, total: isEarly ? current : total, studentName });
     setSessionResults(prev => [...prev, { name: studentName, stars: earned, score, correct: fc, total: isEarly ? current : total }]);
@@ -591,7 +673,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     try { recogRef.current?.stop(); } catch {}
     window.speechSynthesis?.cancel();
     clearTimeout(resultTimerRef.current);
-    pausedPhaseRef.current = phase; // remember exact phase
+    pausedPhaseRef.current = phase;
     isPausedRef.current = true;
     setIsPaused(true);
     setListening(false);
@@ -603,14 +685,11 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     isPausedRef.current = false;
     setIsPaused(false);
     setMimiVideo(mimiWaveVideo);
-    // Always resume from 'asking' so the question is re-spoken clearly
-    setPhase('idle_resume'); // briefly toggle to force useEffect re-run
+    setPhase('idle_resume');
     setTimeout(() => setPhase('asking'), 50);
   }
 
-  // ── End button clicked — immediately stop activity, show confirm popup ────
   function handleEndClick() {
-    // Immediately freeze everything (same as pause)
     try { recogRef.current?.stop(); } catch {}
     window.speechSynthesis?.cancel();
     clearTimeout(resultTimerRef.current);
@@ -620,30 +699,22 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     setListening(false);
     setMimiVideo(mimiIdleVideo);
     setMimiSaying('⏸️ Activity paused');
-    // Show confirm popup
     setShowEndConfirm(true);
   }
 
-  // ── End session confirmed — save results and show results screen ──────────
   function handleEndSession() {
     setShowEndConfirm(false);
     sessionEndedRef.current = true;
     isPausedRef.current = false;
     clearInterval(pollRef.current);
     clearTimeout(resultTimerRef.current);
-    // say ONLY "Well done [name]!" — nothing else
-    if (studentName) {
-      const msg = `Well done ${studentName}!`;
-      speak(msg);
-    }
-    // use phaseRef.current — not stale `phase` closure
+    if (studentName) speak(`Well done ${studentName}!`);
     if (studentName && !['waiting','between_students','done'].includes(phaseRef.current)) {
       finishStudent(correctRef.current, true, true);
     }
     setSessionEnded(true);
   }
 
-  // ── Cancel end — resume the activity ─────────────────────────────────────
   function handleCancelEnd() {
     setShowEndConfirm(false);
     handleResume();
@@ -655,7 +726,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   const progress    = (phase === 'waiting' || phase === 'between_students') ? 0
     : ((current + (phase === 'done' ? 1 : 0)) / total) * 100;
 
-  // Determine which card to render for asking/listening
   function renderWordCard() {
     if (activity.id === 9) {
       return <PictureGuessCard word={word} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />;
@@ -666,7 +736,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     if (activity.id === 11) {
       return <PatternCard item={currentItem} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />;
     }
-    // Default — standard word card
     return (
       <motion.div key={`word-${current}`} initial={{ scale:0.5, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.5, opacity:0 }} className="flex flex-col items-center gap-5 max-w-md">
         <motion.div animate={{ y:[0,-10,0] }} transition={{ duration:2, repeat:Infinity }}
@@ -706,7 +775,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${bgImage})` }}>
 
-      {/* LLM questions loading screen */}
+      {/* LLM loading screen */}
       {!questionsReady && (
         <div className="absolute inset-0 z-50 bg-black/60 flex items-center justify-center">
           <motion.div initial={{ scale:0.8 }} animate={{ scale:1 }}
@@ -719,7 +788,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         </div>
       )}
 
-      {/* Difficulty badge — top right only */}
+      {/* Difficulty badge */}
       <div className="absolute top-6 right-6 z-50">
         <span className={`px-4 py-2 rounded-full text-sm font-black backdrop-blur border-2 ${
           difficulty === 'easy'   ? 'bg-green-400/80 text-white border-green-600' :
@@ -730,7 +799,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         </span>
       </div>
 
-      {/* ── End confirm dialog ── */}
+      {/* End confirm dialog */}
       <AnimatePresence>
         {showEndConfirm && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
@@ -755,7 +824,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         )}
       </AnimatePresence>
 
-      {/* ── Session Ended — full results screen ── */}
+      {/* Session Ended — results screen */}
       <AnimatePresence>
         {sessionEnded && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
@@ -767,7 +836,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
                 <h2 className="text-3xl font-black text-purple-700">Activity Complete!</h2>
                 <p className="text-gray-400 text-sm mt-1">{activity.name} · {DIFFICULTY_LABELS[difficulty]}</p>
               </div>
-
               {sessionResults.length === 0 ? (
                 <p className="text-center text-gray-400 py-4">No students completed any questions.</p>
               ) : (
@@ -791,11 +859,9 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
                   ))}
                 </div>
               )}
-
               <div className="bg-blue-50 rounded-2xl p-4 mb-4 border border-blue-200 text-center">
                 <p className="text-blue-700 text-sm font-semibold">⭐ Stars saved to Students tab &amp; Parent portal</p>
               </div>
-
               <button onClick={() => { clearInterval(pollRef.current); onClose(); }}
                 className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-black text-lg rounded-2xl shadow-lg transition-all">
                 Close
@@ -805,12 +871,14 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         )}
       </AnimatePresence>
 
+      {/* Progress bar */}
       {phase !== 'waiting' && phase !== 'between_students' && (
         <div className="absolute top-0 left-0 right-0 h-2 bg-white/20 z-40">
           <motion.div className="h-full bg-white rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.4 }} />
         </div>
       )}
 
+      {/* Too-close warning */}
       <AnimatePresence>
         {showWarning && (
           <motion.div initial={{ opacity:0, scale:0.8, y:-50 }} animate={{ opacity:1, scale:1, y:0 }} exit={{ opacity:0, scale:0.8, y:-50 }}
@@ -822,6 +890,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         )}
       </AnimatePresence>
 
+      {/* Student name banner */}
       <AnimatePresence>
         {studentName && phase !== 'waiting' && phase !== 'between_students' && (
           <motion.div initial={{ opacity:0, y:-30, scale:0.8 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, y:-30 }}
@@ -833,6 +902,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         )}
       </AnimatePresence>
 
+      {/* Session scoreboard */}
       {sessionResults.length > 0 && phase !== 'between_students' && (
         <div className="absolute top-6 left-6 z-40 bg-white/90 backdrop-blur rounded-2xl p-4 shadow-xl border-2 border-purple-200 min-w-[220px]">
           <p className="text-sm font-black text-purple-700 mb-2">📊 Session Scoreboard</p>
@@ -850,6 +920,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         </div>
       )}
 
+      {/* Main content area */}
       <div className="absolute inset-0 flex flex-col justify-center z-20 pl-12 pr-[480px]">
         <AnimatePresence mode="wait">
 
@@ -956,43 +1027,35 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         </AnimatePresence>
       </div>
 
-      {/* ── Bottom control bar ── */}
+      {/* Bottom control bar */}
       {!sessionEnded && (
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-40 flex items-center gap-4">
-          {/* Pause / Resume */}
           {studentName && !['waiting','between_students','done'].includes(phase) && (
             isPaused ? (
-              <motion.button
-                onClick={handleResume}
-                whileHover={{ scale:1.06 }} whileTap={{ scale:0.95 }}
+              <motion.button onClick={handleResume} whileHover={{ scale:1.06 }} whileTap={{ scale:0.95 }}
                 className="flex items-center gap-2 px-8 py-4 bg-green-500 hover:bg-green-600 text-white font-black text-lg rounded-2xl shadow-2xl border-4 border-green-700 transition-colors">
-                ▶ Resume
-                <span className="text-xs font-medium opacity-70 ml-1">[Space]</span>
+                ▶ Resume <span className="text-xs font-medium opacity-70 ml-1">[Space]</span>
               </motion.button>
             ) : (
-              <motion.button
-                onClick={handlePause}
-                whileHover={{ scale:1.06 }} whileTap={{ scale:0.95 }}
+              <motion.button onClick={handlePause} whileHover={{ scale:1.06 }} whileTap={{ scale:0.95 }}
                 className="flex items-center gap-2 px-8 py-4 bg-yellow-400 hover:bg-yellow-500 text-white font-black text-lg rounded-2xl shadow-2xl border-4 border-yellow-600 transition-colors">
-                ⏸ Pause
-                <span className="text-xs font-medium opacity-70 ml-1">[Space]</span>
+                ⏸ Pause <span className="text-xs font-medium opacity-70 ml-1">[Space]</span>
               </motion.button>
             )
           )}
-
-          {/* End Session */}
-          <motion.button
-            onClick={handleEndClick}
-            whileHover={{ scale:1.06 }} whileTap={{ scale:0.95 }}
+          <motion.button onClick={handleEndClick} whileHover={{ scale:1.06 }} whileTap={{ scale:0.95 }}
             className="flex items-center gap-2 px-8 py-4 bg-red-500 hover:bg-red-600 text-white font-black text-lg rounded-2xl shadow-2xl border-4 border-red-700 transition-colors">
             ⏹ End Session
           </motion.button>
         </div>
       )}
 
+      {/* Mimi video */}
       <div className="absolute bottom-0 right-0 z-30 pointer-events-none">
-        <motion.div key={mimiVideo} initial={{ scale:0.8, opacity:0, y:50 }} animate={{ scale:1, opacity:1, y:0 }} transition={{ type:'spring', damping:12, stiffness:100 }} className="w-[460px] h-[460px]" style={{ background:'transparent' }}>
-          <video key={mimiVideo} src={mimiVideo} autoPlay loop muted playsInline className="w-full h-full object-contain" style={{ isolation:'isolate', mixBlendMode:'normal', filter:'drop-shadow(0 8px 32px rgba(0,0,0,0.4))', background:'transparent' }} />
+        <motion.div key={mimiVideo} initial={{ scale:0.8, opacity:0, y:50 }} animate={{ scale:1, opacity:1, y:0 }} transition={{ type:'spring', damping:12, stiffness:100 }}
+          className="w-[460px] h-[460px]" style={{ background:'transparent' }}>
+          <video key={mimiVideo} src={mimiVideo} autoPlay loop muted playsInline className="w-full h-full object-contain"
+            style={{ isolation:'isolate', mixBlendMode:'normal', filter:'drop-shadow(0 8px 32px rgba(0,0,0,0.4))', background:'transparent' }} />
         </motion.div>
       </div>
     </div>
@@ -1011,36 +1074,27 @@ const ActivitiesTab = () => {
   const [runningDifficulty,  setRunningDifficulty]  = useState('easy');
   const [lastResult,         setLastResult]          = useState(null);
   const [showBanner,         setShowBanner]          = useState(false);
-  // Per-activity saved difficulty (set via Config modal, default 'easy')
   const [activityDifficulty, setActivityDifficulty] = useState({});
 
   const activities = [
-    { id:1,  name:'Alphabet Practice',  icon:'🔤', category:'Alphabets', avgTime:'15 min', difficulty:'Easy→Hard',   studentsCompleted:156, avgScore:4.5, description:'Learn and practice letters with pronunciation and examples' },
-    { id:2,  name:'Phonics Basics',     icon:'🔊', category:'Phonics',   avgTime:'12 min', difficulty:'Easy→Hard',   studentsCompleted:128, avgScore:4.0, description:'Understanding letter sounds and phonetic patterns' },
-    { id:3,  name:'Fruits Recognition', icon:'🍎', category:'Objects',   avgTime:'10 min', difficulty:'Easy→Hard',   studentsCompleted:142, avgScore:4.2, description:'Identify and name common fruits with visual aids' },
-    { id:4,  name:'Animal Names',      icon:'🐾', category:'Objects',   avgTime:'8 min',  difficulty:'Easy→Hard',   studentsCompleted:134, avgScore:4.6, description:'Learn animal names and their sounds' },
-    { id:5,  name:'Colors Matching',    icon:'🎨', category:'Colors',    avgTime:'10 min', difficulty:'Easy→Hard',   studentsCompleted:145, avgScore:4.8, description:'Match objects with their colors' },
-    { id:6,  name:'Number Counting',    icon:'🔢', category:'Numbers',   avgTime:'12 min', difficulty:'Easy→Hard',   studentsCompleted:138, avgScore:4.3, description:'Count objects and recognize numbers 1-10 and beyond' },
-    { id:7,  name:'Body Parts',         icon:'👀', category:'Body',      avgTime:'10 min', difficulty:'Easy→Hard',   studentsCompleted:0,   avgScore:0,   description:'Learn body part names from head to toe' },
-    { id:8,  name:'Shapes',             icon:'🔷', category:'Shapes',    avgTime:'8 min',  difficulty:'Easy→Hard',   studentsCompleted:0,   avgScore:0,   description:'Identify and name basic to complex shapes' },
-    { id:9,  name:'Picture Guess',      icon:'🖼️', category:'Guess',     avgTime:'10 min', difficulty:'Easy→Hard',   studentsCompleted:0,   avgScore:0,   description:'Big emoji shown — child guesses the name without text hints' },
-    { id:10, name:'Counting Game',      icon:'🔢', category:'Numbers',   avgTime:'10 min', difficulty:'Easy→Hard',   studentsCompleted:0,   avgScore:0,   description:'Count emoji items on screen — harder levels include addition' },
-    { id:11, name:'Pattern Fun',        icon:'🔴', category:'Patterns',  avgTime:'12 min', difficulty:'Easy→Hard',   studentsCompleted:0,   avgScore:0,   description:'Complete AB, ABC, skip-count, and mixed patterns' },
-    { id:12, name:'Quiz Mode',          icon:'🏆', category:'Mixed',     avgTime:'15 min', difficulty:'Easy→Hard',   studentsCompleted:0,   avgScore:0,   description:'Mixed rounds: picture, counting, and pattern challenges' },
+    { id:1,  name:'Alphabet Practice',  icon:'🔤', category:'Alphabets', avgTime:'15 min', difficulty:'Easy→Hard', studentsCompleted:156, avgScore:4.5, description:'Learn and practice letters with pronunciation and examples' },
+    { id:2,  name:'Phonics Basics',     icon:'🔊', category:'Phonics',   avgTime:'12 min', difficulty:'Easy→Hard', studentsCompleted:128, avgScore:4.0, description:'Understanding letter sounds and phonetic patterns' },
+    { id:3,  name:'Fruits Recognition', icon:'🍎', category:'Objects',   avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:142, avgScore:4.2, description:'Identify and name common fruits with visual aids' },
+    { id:4,  name:'Animal Names',       icon:'🐾', category:'Objects',   avgTime:'8 min',  difficulty:'Easy→Hard', studentsCompleted:134, avgScore:4.6, description:'Learn animal names and their sounds' },
+    { id:5,  name:'Colors Matching',    icon:'🎨', category:'Colors',    avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:145, avgScore:4.8, description:'Match objects with their colors' },
+    { id:6,  name:'Number Counting',    icon:'🔢', category:'Numbers',   avgTime:'12 min', difficulty:'Easy→Hard', studentsCompleted:138, avgScore:4.3, description:'Count objects and recognize numbers 1-10 and beyond' },
+    { id:7,  name:'Body Parts',         icon:'👀', category:'Body',      avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Learn body part names from head to toe' },
+    { id:8,  name:'Shapes',             icon:'🔷', category:'Shapes',    avgTime:'8 min',  difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Identify and name basic to complex shapes' },
+    { id:9,  name:'Picture Guess',      icon:'🖼️', category:'Guess',     avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Big emoji shown — child guesses the name without text hints' },
+    { id:10, name:'Counting Game',      icon:'🔢', category:'Numbers',   avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Count emoji items on screen — harder levels include addition' },
+    { id:11, name:'Pattern Fun',        icon:'🔴', category:'Patterns',  avgTime:'12 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Complete AB, ABC, skip-count, and mixed patterns' },
+    { id:12, name:'Quiz Mode',          icon:'🏆', category:'Mixed',     avgTime:'15 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Mixed rounds: picture, counting, and pattern challenges' },
   ];
 
-  // "Start" clicked → launch overlay with this activity's saved difficulty
   const handleStartActivity = (activity) => {
     const diff = activityDifficulty[activity.id] || 'easy';
     setRunningDifficulty(diff);
     setRunningActivity(activity);
-  };
-
-  // Difficulty chosen → launch overlay
-  const handleDifficultySelect = (diff) => {
-    setRunningDifficulty(diff);
-    setRunningActivity(selectedActivity);
-    setShowDiffModal(false);
   };
 
   const handleConfigureActivity = (activity) => { setSelectedActivity(activity); setShowConfigModal(true); };
@@ -1066,13 +1120,15 @@ const ActivitiesTab = () => {
 
   const handleClose = useCallback(() => setRunningActivity(null), []);
 
-  const getDifficultyColor = () => 'bg-purple-100 text-purple-700';
-
   return (
     <>
-      {/* Activity overlay */}
       {runningActivity && (
-        <MimiActivityOverlay activity={runningActivity} difficulty={runningDifficulty} onStudentDone={handleStudentDone} onClose={handleClose} />
+        <MimiActivityOverlay
+          activity={runningActivity}
+          difficulty={runningDifficulty}
+          onStudentDone={handleStudentDone}
+          onClose={handleClose}
+        />
       )}
 
       <div className="space-y-6">
@@ -1147,7 +1203,11 @@ const ActivitiesTab = () => {
                     <span className="text-text/60">Difficulty:</span>
                     {(() => {
                       const d = activityDifficulty[activity.id] || 'easy';
-                      const cfg = { easy:['bg-green-100 text-green-700','Easy'], medium:['bg-yellow-100 text-yellow-700','Medium'], hard:['bg-red-100 text-red-700','Hard'] }[d];
+                      const cfg = {
+                        easy:   ['bg-green-100 text-green-700',  'Easy'],
+                        medium: ['bg-yellow-100 text-yellow-700','Medium'],
+                        hard:   ['bg-red-100 text-red-700',      'Hard'],
+                      }[d];
                       return <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${cfg[0]}`}>{cfg[1]}</span>;
                     })()}
                   </div>
@@ -1159,7 +1219,9 @@ const ActivitiesTab = () => {
                 <div className="flex items-center gap-2 mb-4 p-3 bg-gray-50 rounded-xl">
                   <Users size={16} className="text-text/60" />
                   <span className="text-sm text-text/70">
-                    {activity.studentsCompleted > 0 ? <><strong>{activity.studentsCompleted}</strong> completions</> : <span className="text-purple-500 font-semibold">Ready to use!</span>}
+                    {activity.studentsCompleted > 0
+                      ? <><strong>{activity.studentsCompleted}</strong> completions</>
+                      : <span className="text-purple-500 font-semibold">Ready to use!</span>}
                   </span>
                   {activity.avgScore > 0 && <span className="ml-auto text-sm font-semibold text-text">⭐ {activity.avgScore}/5</span>}
                 </div>
