@@ -775,7 +775,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   return (
     <div className="fixed inset-0 z-50 bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${bgImage})` }}>
 
-      {/* LLM loading screen */}
+      {/* LLM loading screen
       {!questionsReady && (
         <div className="absolute inset-0 z-50 bg-black/60 flex items-center justify-center">
           <motion.div initial={{ scale:0.8 }} animate={{ scale:1 }}
@@ -786,7 +786,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
             <p className="text-purple-500 text-sm">Generating fresh questions just for you…</p>
           </motion.div>
         </div>
-      )}
+      )} */}
 
       {/* Difficulty badge */}
       <div className="absolute top-6 right-6 z-50">
