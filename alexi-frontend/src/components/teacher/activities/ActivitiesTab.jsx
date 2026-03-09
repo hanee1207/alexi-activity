@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { API_ENDPOINTS } from '../../../config';
 import { useStars } from '../../../context/StarContext';
 
-import bgImage          from '../../../assets/images/mimi/bg.jpg';
+import bgImage          from '../../../assets/images/mimi/activity_bg.jpg';
 import mimiIdleVideo    from '../../../assets/images/mimi/mimiidell_nobg.webm';
 import mimiWaveVideo    from '../../../assets/images/mimi/mimiwavehand_nobg.webm';
 import mimiHappyVideo   from '../../../assets/images/mimi/mimiwavehand_nobg.webm'; // was .mp4 which had white bg
@@ -363,8 +363,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
 
   const [words,            setWords]            = useState(staticWords);
   const [loadingQuestions, setLoadingQuestions] = useState(activity.id >= 9);
-  // 'loading' | 'llm' | 'fallback' — shown as small badge so teacher knows which source
-  const [questionSource,   setQuestionSource]   = useState(activity.id >= 9 ? 'loading' : 'static');
   const total = words.length;
 
   const [phase,          setPhase]          = useState('waiting');
@@ -391,7 +389,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   const pollRef         = useRef(null);
   const phaseRef        = useRef('waiting');
   const seenRef         = useRef(new Set());
-  const pausedPhaseRef  = useRef(null);
   const resultTimerRef  = useRef(null);
   const sessionEndedRef = useRef(false);
   const isPausedRef     = useRef(false);
@@ -434,20 +431,16 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         const normalized = normalizeQuestions(activity.id, qs);
         if (normalized && normalized.length > 0) {
           setWords(normalized);
-          setQuestionSource('llm');
         } else {
           console.warn('[LLM Questions] ⚠️ Normalize returned empty — using shuffled fallback');
-          setQuestionSource('fallback');
         }
       } else {
         console.warn('[LLM Questions] ⚠️ Empty/no questions from LLM — using shuffled fallback. Response:', res.data);
-        setQuestionSource('fallback');
       }
     })
     .catch(err => {
       if (cancelled) return;
       console.error('[LLM Questions] ❌ Network error:', err.message, '— using shuffled fallback');
-      setQuestionSource('fallback');
     })
     .finally(() => {
       if (!cancelled) setLoadingQuestions(false);
@@ -474,7 +467,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
 
   const startCameraPoll = useCallback(() => {
     clearInterval(pollRef.current);
-    axios.get(API_ENDPOINTS.START_CLASSROOM).catch(() => {});
+    axios.get(API_ENDPOINTS.START_FACE_DETECT).catch(() => {});
     pollRef.current = setInterval(async () => {
       if (phaseRef.current !== 'waiting') return;
       try {
@@ -754,7 +747,6 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     try { recogRef.current?.stop(); } catch {}
     window.speechSynthesis?.cancel();
     clearTimeout(resultTimerRef.current);
-    pausedPhaseRef.current = phase;
     isPausedRef.current = true;
     setIsPaused(true);
     setListening(false);
@@ -789,6 +781,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     isPausedRef.current = false;
     clearInterval(pollRef.current);
     clearTimeout(resultTimerRef.current);
+    axios.get(API_ENDPOINTS.STOP_FACE_DETECT).catch(() => {});
     if (studentName) speak(`Well done ${studentName}!`);
     if (studentName && !['waiting','between_students','done'].includes(phaseRef.current)) {
       finishStudent(correctRef.current, true, true);
@@ -1104,7 +1097,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
       )}
 
       {/* Main content area */}
-      <div className="absolute inset-0 flex flex-col justify-center z-20 pl-12 pr-[480px]">
+      <div className="absolute inset-0 flex flex-col justify-center z-20 pl-12 pr-[55%]">
         <AnimatePresence mode="wait">
 
           {phase === 'waiting' && (
@@ -1234,18 +1227,11 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
       )}
 
       {/* Mimi video */}
-      <div className="absolute bottom-0 right-0 z-30 pointer-events-none">
+      <div className="absolute bottom-0 right-[8%] z-30 pointer-events-none">
         <motion.div key={mimiVideo} initial={{ scale:0.8, opacity:0, y:50 }} animate={{ scale:1, opacity:1, y:0 }} transition={{ type:'spring', damping:12, stiffness:100 }}
-          className="w-[460px] h-[460px]" style={{ background:'transparent', backgroundColor:'transparent' }}>
+          className="w-[560px] h-[560px]" style={{ background:'transparent', backgroundColor:'transparent' }}>
           <video key={mimiVideo} src={mimiVideo} autoPlay loop muted playsInline className="w-full h-full object-contain"
-            style={{
-              background: 'transparent',
-              backgroundColor: 'transparent',
-              // Remove white fringe from any video that isn't true transparent
-              filter: mimiVideo === mimiHappyVideo
-                ? 'drop-shadow(0 4px 24px rgba(100,0,200,0.3))'
-                : 'drop-shadow(0 4px 24px rgba(100,0,200,0.3))',
-            }} />
+            style={{ background: 'transparent', backgroundColor: 'transparent' }} />
         </motion.div>
       </div>
     </div>

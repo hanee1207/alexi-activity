@@ -10,7 +10,9 @@ export const API_ENDPOINTS = {
   ACTIVITY_EVALUATE:    `${API_BASE_URL}/activity-evaluate`,
   ACTIVITY_SAVE_STARS:  `${API_BASE_URL}/activity-save-stars`,
   ACTIVITY_GET_STARS:   (studentId) => `${API_BASE_URL}/activity-get-stars/${studentId}`,
-  GENERATE_QUESTIONS:   `${API_BASE_URL}/generate-activity-questions`,  // ← ADD THIS LINE
+  GENERATE_QUESTIONS:   `${API_BASE_URL}/generate-activity-questions`,  // ← NEW: LLM questions for activities 9-12
+  START_FACE_DETECT:    `${API_BASE_URL}/start-face-detect`,              // ← face detect only, no attendance
+  STOP_FACE_DETECT:     `${API_BASE_URL}/stop-face-detect`,
 };
 
 export default { API_BASE_URL, API_ENDPOINTS };

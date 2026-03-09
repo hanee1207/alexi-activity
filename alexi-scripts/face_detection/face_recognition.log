@@ -7200,3 +7200,21 @@ AttributeError: module 'cv2' has no attribute 'VideoCapture'
 2026-03-09 10:36:09,549 - INFO - System standing by — say 'Hey Alexi' to begin
 2026-03-09 10:36:09,557 - INFO - Wake word listener started — say 'Hey Alexi'
 2026-03-09 10:36:09,558 - INFO - System standing by — say 'Hey Alexi' to begin
+2026-03-09 16:37:11,703 - INFO - SpeechManager ready
+2026-03-09 16:37:12,814 - INFO - Calibrating microphone…
+2026-03-09 16:37:13,977 - INFO - SpeechRecognizer ready
+2026-03-09 16:37:13,978 - INFO - ============================================================
+2026-03-09 16:37:13,979 - INFO - FACE RECOGNITION ATTENDANCE SYSTEM
+2026-03-09 16:37:13,980 - INFO - ============================================================
+2026-03-09 16:37:14,796 - INFO - Loaded: Dron
+2026-03-09 16:37:15,353 - INFO - Loaded: ghanisht
+2026-03-09 16:37:16,588 - INFO - Loaded: hanee
+2026-03-09 16:37:17,309 - INFO - Loaded: Nishit
+2026-03-09 16:37:17,965 - INFO - Loaded: Shikha
+2026-03-09 16:37:18,465 - INFO - Loaded: Tushar
+2026-03-09 16:37:19,412 - INFO - Loaded: vini
+2026-03-09 16:37:20,099 - INFO - Loaded: vini
+2026-03-09 16:37:20,099 - INFO - Known people (8): Dron, ghanisht, hanee, Nishit, Shikha, Tushar, vini, vini
+2026-03-09 16:37:20,101 - INFO - SpeechManager ready
+2026-03-09 16:37:20,686 - INFO - Calibrating microphone…
+2026-03-09 16:37:21,921 - INFO - SpeechRecognizer ready

@@ -19,6 +19,17 @@ except Exception:
 # ── Mimi LLM Session (your original) ─────────────────────────────────────────
 from mimi_llm_session import MimiLLMSession
 
+# ── Computer Vision (used by face-detect route) ──────────────────────────────
+import time
+import traceback
+try:
+    import cv2
+    import numpy as np
+    import face_recognition as _face_recognition_lib
+    _cv_available = True
+except ImportError:
+    _cv_available = False
+
 # ── LLM clients ───────────────────────────────────────────────────────────────
 try:
     import openai
@@ -268,6 +279,91 @@ def start_classroom():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route('/start-face-detect', methods=['GET'])
+def start_face_detect():
+    """
+    Face detection for Activities — identifies WHO is in front of the camera
+    but does NOT mark attendance or trigger mood conversation.
+    """
+    try:
+        def _detect_only():
+            if not _cv_available:
+                return
+            known_dir = os.path.join(os.path.dirname(__file__), "face_detection", "known_faces")
+            if not os.path.exists(known_dir):
+                known_dir = os.path.join(os.path.dirname(__file__), "known_faces")
+
+            known_encodings, known_names = [], []
+            if os.path.exists(known_dir):
+                for fname in os.listdir(known_dir):
+                    if not fname.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        continue
+                    img = _face_recognition_lib.load_image_file(os.path.join(known_dir, fname))
+                    encs = _face_recognition_lib.face_encodings(img)
+                    if encs:
+                        known_encodings.append(encs[0])
+                        known_names.append(os.path.splitext(fname)[0].replace('_', ' ').title())
+
+            cap = cv2.VideoCapture(0)
+            system.current_person  = None
+            system.current_action  = 'detecting'
+            system.current_warning = None
+
+            try:
+                while getattr(system, '_activity_detecting', False):
+                    ret, frame = cap.read()
+                    if not ret:
+                        time.sleep(0.1)
+                        continue
+                    small = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+                    rgb   = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
+                    locs  = _face_recognition_lib.face_locations(rgb)
+                    encs  = _face_recognition_lib.face_encodings(rgb, locs)
+
+                    # Too-close warning
+                    system.current_warning = None
+                    for (top, right, bottom, left) in locs:
+                        if (bottom - top) > 80:
+                            system.current_warning = 'too_close'
+                            break
+
+                    # Match face — identify only, no attendance
+                    matched = None
+                    for enc in encs:
+                        if not known_encodings:
+                            break
+                        dists = _face_recognition_lib.face_distance(known_encodings, enc)
+                        best  = int(np.argmin(dists))
+                        if dists[best] < 0.6:
+                            matched = known_names[best]
+                            break
+                    system.current_person = matched
+                    system.current_action = 'recognized' if matched else 'detecting'
+                    time.sleep(0.05)
+            finally:
+                cap.release()
+                system.current_action  = 'idle'
+                system.current_person  = None
+                system._activity_detecting = False
+
+        system._activity_detecting = True
+        t = threading.Thread(target=_detect_only, daemon=True)
+        t.start()
+        return jsonify({"status": "success", "message": "Face detection started (no attendance)"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/stop-face-detect', methods=['GET'])
+def stop_face_detect():
+    """Stop the activity face detection loop."""
+    try:
+        system._activity_detecting = False
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route('/get-status', methods=['GET'])
 def get_status():
     """Real-time status from face recognition. Frontend polls every 500ms."""
@@ -445,7 +541,7 @@ def generate_activity_questions():
 
     except Exception as e:
         print(f"[generate-questions] Unexpected error: {type(e).__name__}: {e}")
-        import traceback; traceback.print_exc()
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
