@@ -10,7 +10,7 @@ import { useStars } from '../../../context/StarContext';
 import bgImage          from '../../../assets/images/mimi/bg.jpg';
 import mimiIdleVideo    from '../../../assets/images/mimi/mimiidell_nobg.webm';
 import mimiWaveVideo    from '../../../assets/images/mimi/mimiwavehand_nobg.webm';
-import mimiHappyVideo   from '../../../assets/images/mimi/A Fantastic Day of Fun and Laughter.mp4';
+import mimiHappyVideo   from '../../../assets/images/mimi/mimiwavehand_nobg.webm'; // was .mp4 which had white bg
 import mimiNeutralVideo from '../../../assets/images/mimi/mimiidell_nobg.webm';
 
 // ── Emoji map ─────────────────────────────────────────────────────────────────
@@ -54,9 +54,10 @@ const WORD_EMOJIS = {
   Octagon:'🛑', Cylinder:'🪣', Cone:'🍦',
   // Vehicles
   Car:'🚗', Bus:'🚌', Train:'🚆', Bicycle:'🚲', Airplane:'✈️', Truck:'🚛',
+  Helicopter:'🚁', Rocket:'🚀', Boat:'⛵', Ship:'🛳️',
 };
 
-// ── Activity word sets (difficulty-aware) ─────────────────────────────────────
+// ── Activity word sets (difficulty-aware) — used for activities 1-8 ──────────
 const ACTIVITY_WORDS = {
   1: {
     easy:   ['Apple','Ball','Cat','Dog','Hat','Rat'],
@@ -98,6 +99,7 @@ const ACTIVITY_WORDS = {
     medium: ['Star','Oval','Heart','Diamond'],
     hard:   ['Pentagon','Hexagon','Octagon','Cylinder','Cone'],
   },
+  // Activities 9-12: static FALLBACK only — LLM generates fresh questions each session
   9: {
     easy:   ['Dog','Cat','Cow','Lion','Tiger','Rabbit','Duck','Bear'],
     medium: ['Apple','Banana','Mango','Orange','Grapes','Strawberry','Pineapple','Watermelon'],
@@ -155,26 +157,35 @@ const ACTIVITY_WORDS = {
       { pattern:'100 → 90 → 80 → 70 → ?',  answer:'Sixty',    hint:'Sixty' },
     ],
   },
-  12: {
-    easy: [
-      'Dog','Cat','Cow','Apple','Banana','Mango',
-      'Red','Blue','Green','Circle','Square','Triangle',
-      'Head','Eye','Nose',
-    ],
-    medium: [
-      'Lion','Tiger','Horse','Orange','Grapes','Papaya',
-      'Purple','Yellow','Pink','Star','Heart','Oval',
-      'Shoulder','Knee','Elbow',
-    ],
-    hard: [
-      'Elephant','Penguin','Dolphin','Strawberry','Pineapple','Pomegranate',
-      'Crimson','Turquoise','Indigo','Pentagon','Hexagon','Octagon',
-      'Wrist','Thumb','Chin',
-    ],
-  },
+  // Activity 12 — built dynamically from all other activities (see buildQuiz12 below)
+  12: { easy: [], medium: [], hard: [] },
 };
 
 const DIFFICULTY_LABELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildQuiz12 — assembles Activity 12 questions from ALL 11 activities
+// Each item gets a _source tag (shown as badge) so child knows the category
+// ─────────────────────────────────────────────────────────────────────────────
+function buildQuiz12(difficulty) {
+  // Only word-based activities (1-8) — child answers by saying the word aloud
+  // Pick 2 words from each of the 8 activities = 16, then trim to 15
+  const pickN = (arr, n) => shuffleArray(arr).slice(0, Math.min(n, arr.length));
+  const tag   = (item, source) => ({ _word: item, _source: source });
+
+  const items = [
+    ...pickN(ACTIVITY_WORDS[1][difficulty] || ACTIVITY_WORDS[1].easy, 2).map(w => tag(w, '🔤 Alphabet')),
+    ...pickN(ACTIVITY_WORDS[2][difficulty] || ACTIVITY_WORDS[2].easy, 2).map(w => tag(w, '🔊 Phonics')),
+    ...pickN(ACTIVITY_WORDS[3][difficulty] || ACTIVITY_WORDS[3].easy, 2).map(w => tag(w, '🍎 Fruits')),
+    ...pickN(ACTIVITY_WORDS[4][difficulty] || ACTIVITY_WORDS[4].easy, 2).map(w => tag(w, '🐾 Animals')),
+    ...pickN(ACTIVITY_WORDS[5][difficulty] || ACTIVITY_WORDS[5].easy, 2).map(w => tag(w, '🎨 Colors')),
+    ...pickN(ACTIVITY_WORDS[6][difficulty] || ACTIVITY_WORDS[6].easy, 2).map(w => tag(w, '🔢 Numbers')),
+    ...pickN(ACTIVITY_WORDS[7][difficulty] || ACTIVITY_WORDS[7].easy, 2).map(w => tag(w, '👀 Body Parts')),
+    ...pickN(ACTIVITY_WORDS[8][difficulty] || ACTIVITY_WORDS[8].easy, 1).map(w => tag(w, '🔷 Shapes')),
+  ]; // 2+2+2+2+2+2+2+1 = 15 words, all spoken-answer
+
+  return shuffleArray(items);
+}
 
 function speak(text, rate = 0.85) {
   if (!window.speechSynthesis) return;
@@ -188,16 +199,15 @@ function speak(text, rate = 0.85) {
 // Special renderers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PictureGuessCard({ word, mimiSaying, phase, listening, transcript }) {
-  const emoji = WORD_EMOJIS[word] || '🖼️';
+function PictureGuessCard({ word, emoji, mimiSaying, phase, listening, transcript }) {
+  const displayEmoji = emoji || WORD_EMOJIS[word] || '🖼️';
   return (
     <div className="flex flex-col items-center gap-5 max-w-md">
       <motion.div animate={{ y:[0,-10,0] }} transition={{ duration:2, repeat:Infinity }}
         className="w-52 h-52 bg-white/95 rounded-3xl shadow-2xl flex items-center justify-center text-9xl border-4 border-purple-300">
-        {emoji}
+        {displayEmoji}
       </motion.div>
       <div className="bg-white/90 backdrop-blur rounded-3xl px-10 py-5 shadow-xl border-4 border-purple-300 text-center w-full">
-        <p className="text-2xl font-black text-purple-700 mb-2">🖼️ What do you see?</p>
         <p className="text-lg text-purple-500 mb-2">{mimiSaying}</p>
         {phase === 'listening' && (
           <motion.div animate={{ scale:[1,1.06,1] }} transition={{ duration:0.6, repeat:Infinity }}
@@ -219,13 +229,13 @@ function CountingCard({ item, mimiSaying, phase, listening, transcript }) {
       <div className="bg-white/95 rounded-3xl shadow-2xl p-6 border-4 border-purple-300 text-center">
         {isAddition ? (
           <>
-            <p className="text-4xl font-black text-purple-700 mb-2">How many in total?</p>
+            <p className="text-2xl font-black text-purple-700 mb-2">How many in total?</p>
             <div className="text-5xl mb-2">{item.display}</div>
             <p className="text-2xl font-bold text-gray-600">{item.addend1} + {item.addend2} = ?</p>
           </>
         ) : (
           <>
-            <p className="text-3xl font-black text-purple-700 mb-2">How many? 🔢</p>
+            <p className="text-2xl font-black text-purple-700 mb-2">How many? 🔢</p>
             <div className="text-4xl leading-loose mb-2">{item?.display}</div>
           </>
         )}
@@ -249,9 +259,8 @@ function PatternCard({ item, mimiSaying, phase, listening, transcript }) {
   return (
     <div className="flex flex-col items-center gap-5 max-w-md">
       <div className="bg-white/95 rounded-3xl shadow-2xl p-6 border-4 border-purple-300 text-center w-full">
-        <p className="text-2xl font-black text-purple-700 mb-3">Complete the pattern! 🔮</p>
-        <p className="text-4xl font-black text-gray-800 mb-2">{item?.pattern}</p>
-        <p className="text-lg text-gray-400">What comes next?</p>
+        <p className="text-5xl font-black text-gray-800 mb-3">{item?.pattern}</p>
+        <p className="text-base text-purple-500">What comes next?</p>
       </div>
       <div className="bg-white/90 backdrop-blur rounded-3xl px-10 py-4 shadow-xl border-4 border-purple-300 text-center w-full">
         <p className="text-lg text-purple-500 mb-2">{mimiSaying}</p>
@@ -269,11 +278,93 @@ function PatternCard({ item, mimiSaying, phase, listening, transcript }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// normalizeQuestions — converts LLM JSON output to existing word formats
+// ─────────────────────────────────────────────────────────────────────────────
+function normalizeQuestions(activityId, questions) {
+  if (!questions || questions.length === 0) return null;
+
+  if (activityId === 9) {
+    // LLM returns [{ emoji, answer }] — store as objects so PictureGuessCard can use the LLM emoji
+    return questions.map(q => ({
+      _llmEmoji: q.emoji || '',
+      answer: q.answer || 'Cat',
+    }));
+  }
+
+  if (activityId === 10) {
+    // LLM returns [{ display, answer, count }] or [{ display, answer, addend1, addend2 }]
+    return questions.map(q => ({
+      display:  q.display  || '🍎🍎',
+      answer:   String(q.answer || '2'),
+      count:    q.count    != null ? q.count   : null,
+      addend1:  q.addend1  != null ? q.addend1 : null,
+      addend2:  q.addend2  != null ? q.addend2 : null,
+    }));
+  }
+
+  if (activityId === 11) {
+    // LLM returns [{ pattern, answer, hint }]
+    return questions.map(q => ({
+      pattern: q.pattern || '🔴 → 🔵 → ?',
+      answer:  q.answer  || 'Red',
+      hint:    q.hint    || q.answer || 'Red',
+    }));
+  }
+
+  if (activityId === 12) {
+    // LLM returns mixed [{ type, ...fields }]
+    return questions.map(q => {
+      if (q.type === 'pattern') {
+        return { pattern: q.pattern, answer: q.answer, hint: q.hint || q.answer };
+      }
+      if (q.type === 'count') {
+        return {
+          display: q.display,
+          answer:  String(q.answer),
+          count:   q.count   != null ? q.count   : null,
+          addend1: q.addend1 != null ? q.addend1 : null,
+          addend2: q.addend2 != null ? q.addend2 : null,
+        };
+      }
+      // type === 'picture' or 'word'
+      if (q.emoji) return { _llmEmoji: q.emoji, answer: q.answer || q.word || 'Dog' };
+      return q.answer || q.word || 'Dog';
+    });
+  }
+
+  return questions;
+}
+
+// Fisher-Yates shuffle — returns a NEW array in random order each call
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MimiActivityOverlay
 // ─────────────────────────────────────────────────────────────────────────────
 function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
-  const wordSet = ACTIVITY_WORDS[activity.id]?.[difficulty] || ACTIVITY_WORDS[activity.id]?.easy || ['Hello'];
-  const [words, setWords]               = useState(wordSet);
+  // Static fallback words (always available instantly for activities 1-8,
+  // and as backup if LLM fails for 9-12)
+  // Activities 1-8: FIXED order (never shuffle)
+  // Activity 12: built from ALL activities combined via buildQuiz12
+  // Activities 9-11: shuffled fallback
+  const rawStatic   = ACTIVITY_WORDS[activity.id]?.[difficulty] || ACTIVITY_WORDS[activity.id]?.easy || ['Hello'];
+  const staticWords = activity.id === 12
+    ? buildQuiz12(difficulty)
+    : activity.id >= 9
+      ? shuffleArray(rawStatic)
+      : rawStatic;
+
+  const [words,            setWords]            = useState(staticWords);
+  const [loadingQuestions, setLoadingQuestions] = useState(activity.id >= 9);
+  // 'loading' | 'llm' | 'fallback' — shown as small badge so teacher knows which source
+  const [questionSource,   setQuestionSource]   = useState(activity.id >= 9 ? 'loading' : 'static');
   const total = words.length;
 
   const [phase,          setPhase]          = useState('waiting');
@@ -310,15 +401,73 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   useEffect(() => { correctRef.current = correct; }, [correct]);
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
+  // ── Fetch LLM questions for activities 9-12 ──────────────────────────────
+  useEffect(() => {
+    if (activity.id < 9) return; // activities 1-8 always use static words
+
+    let cancelled = false;
+    setLoadingQuestions(true);
+
+    // Add session_seed so LLM always gets a different prompt each run
+    const sessionSeed = Math.random().toString(36).slice(2, 8);
+    const count = difficulty === 'hard' ? 8 : 6;
+
+    console.log(`[LLM Questions] Fetching for activity=${activity.id} difficulty=${difficulty} seed=${sessionSeed}`);
+
+    axios.post(API_ENDPOINTS.GENERATE_QUESTIONS, {
+      activity_id:  activity.id,
+      difficulty:   difficulty,
+      count:        count,
+      session_seed: sessionSeed,   // passed to backend so LLM prompt varies
+    })
+    .then(res => {
+      if (cancelled) return;
+      console.log('[LLM Questions] Raw response:', res.data);
+
+      const qs  = res.data?.questions;
+      const err = res.data?.error;
+
+      if (err) console.warn('[LLM Questions] Backend error:', err);
+
+      if (qs && qs.length > 0) {
+        console.log(`[LLM Questions] ✅ Got ${qs.length} LLM questions:`, qs);
+        const normalized = normalizeQuestions(activity.id, qs);
+        if (normalized && normalized.length > 0) {
+          setWords(normalized);
+          setQuestionSource('llm');
+        } else {
+          console.warn('[LLM Questions] ⚠️ Normalize returned empty — using shuffled fallback');
+          setQuestionSource('fallback');
+        }
+      } else {
+        console.warn('[LLM Questions] ⚠️ Empty/no questions from LLM — using shuffled fallback. Response:', res.data);
+        setQuestionSource('fallback');
+      }
+    })
+    .catch(err => {
+      if (cancelled) return;
+      console.error('[LLM Questions] ❌ Network error:', err.message, '— using shuffled fallback');
+      setQuestionSource('fallback');
+    })
+    .finally(() => {
+      if (!cancelled) setLoadingQuestions(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [activity.id, difficulty]); // eslint-disable-line
+
   function getWordLabel(item) {
     if (typeof item === 'string') return item;
-    if (item?.answer) return item.answer;
-    if (item?.hint) return item.hint;
+    if (item?._word)    return item._word;     // Activity 12 word items
+    if (item?._llmEmoji) return item.answer;   // LLM picture item
+    if (item?.answer)   return item.answer;
+    if (item?.hint)     return item.hint;
     return '';
   }
 
   function getAnswer(item) {
     if (typeof item === 'string') return item;
+    if (item?._word)  return item._word;   // Activity 12 word items
     if (item?.answer) return item.answer;
     return '';
   }
@@ -553,7 +702,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
   }
 
   function checkAnswerLocally(word, childSaid) {
-    const heard = (childSaid || '').trim().toLowerCase();
+    const heard    = (childSaid || '').trim().toLowerCase();
     if (!heard) return false;
     const expected = word.toLowerCase();
     return heard.includes(expected) || expected.includes(heard);
@@ -654,13 +803,23 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
 
   const currentItem = words[Math.min(current, total - 1)];
   const word        = getWordLabel(currentItem);
-  const emoji       = WORD_EMOJIS[word] || '📖';
+  // For LLM picture items, use the LLM emoji; otherwise fall back to WORD_EMOJIS map
+  const emoji       = currentItem?._llmEmoji || WORD_EMOJIS[word] || '📖';
   const progress    = (phase === 'waiting' || phase === 'between_students') ? 0
     : ((current + (phase === 'done' ? 1 : 0)) / total) * 100;
 
   function renderWordCard() {
     if (activity.id === 9) {
-      return <PictureGuessCard word={word} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />;
+      return (
+        <PictureGuessCard
+          word={word}
+          emoji={currentItem?._llmEmoji || WORD_EMOJIS[word] || '🖼️'}
+          mimiSaying={mimiSaying}
+          phase={phase}
+          listening={listening}
+          transcript={transcript}
+        />
+      );
     }
     if (activity.id === 10) {
       return <CountingCard item={currentItem} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />;
@@ -668,6 +827,78 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     if (activity.id === 11) {
       return <PatternCard item={currentItem} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />;
     }
+    // Activity 12 — ALL activities mixed: detect type and route to correct card
+    if (activity.id === 12) {
+      // Source badge shown top-left of card
+      const sourceBadge = currentItem?._source
+        ? <span className="px-3 py-1 bg-purple-100 text-purple-600 text-xs font-bold rounded-full mb-2 self-center">{currentItem._source}</span>
+        : null;
+
+      // Pattern item (from activity 11)
+      if (currentItem?.pattern) {
+        return (
+          <div className="flex flex-col items-center gap-0 max-w-md w-full">
+            {sourceBadge}
+            <PatternCard item={currentItem} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />
+          </div>
+        );
+      }
+      // Counting/addition item (from activity 10)
+      if (currentItem?.display) {
+        return (
+          <div className="flex flex-col items-center gap-0 max-w-md w-full">
+            {sourceBadge}
+            <CountingCard item={currentItem} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />
+          </div>
+        );
+      }
+      // LLM picture item
+      if (currentItem?._llmEmoji) {
+        return (
+          <div className="flex flex-col items-center gap-0 max-w-md w-full">
+            {sourceBadge}
+            <PictureGuessCard word={word} emoji={currentItem._llmEmoji} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />
+          </div>
+        );
+      }
+      // Picture item from activity 9 static
+      if (currentItem?._isPicture) {
+        return (
+          <div className="flex flex-col items-center gap-0 max-w-md w-full">
+            {sourceBadge}
+            <PictureGuessCard word={word} emoji={currentItem._emoji || WORD_EMOJIS[word] || '🖼️'} mimiSaying={mimiSaying} phase={phase} listening={listening} transcript={transcript} />
+          </div>
+        );
+      }
+      // Word item (from activities 1-8): show emoji + word
+      if (currentItem?._word) {
+        const wEmoji = WORD_EMOJIS[currentItem._word] || '📖';
+        return (
+          <motion.div key={`word-${current}`} initial={{ scale:0.5, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.5, opacity:0 }}
+            className="flex flex-col items-center gap-3 max-w-md w-full">
+            {sourceBadge}
+            <motion.div animate={{ y:[0,-10,0] }} transition={{ duration:2, repeat:Infinity }}
+              className="w-44 h-44 bg-white/95 rounded-3xl shadow-2xl flex items-center justify-center text-8xl border-4 border-purple-300">
+              {wEmoji}
+            </motion.div>
+            <div className="bg-white/90 backdrop-blur rounded-3xl px-10 py-5 shadow-xl border-4 border-purple-300 text-center w-full">
+              <h2 className="text-5xl font-black text-purple-700 mb-2">{currentItem._word}</h2>
+              <p className="text-lg text-purple-500 mb-2">{mimiSaying}</p>
+              {phase === 'listening' && (
+                <motion.div animate={{ scale:[1,1.06,1] }} transition={{ duration:0.6, repeat:Infinity }}
+                  className="flex items-center gap-2 justify-center mt-2 bg-red-50 rounded-full px-5 py-2">
+                  {listening ? <Mic size={18} className="text-red-500" /> : <MicOff size={18} className="text-gray-400" />}
+                  <span className="font-bold text-red-600 text-sm">{listening ? 'Say it now! 🎤' : 'Listening…'}</span>
+                </motion.div>
+              )}
+              {transcript && <p className="text-xs text-gray-400 mt-2">You said: "{transcript}"</p>}
+            </div>
+            <div className="text-white/80 font-semibold text-sm">{current + 1} / {total}</div>
+          </motion.div>
+        );
+      }
+    }
+    // Default word card (activities 1-8 and plain strings in activity 12)
     return (
       <motion.div key={`word-${current}`} initial={{ scale:0.5, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.5, opacity:0 }} className="flex flex-col items-center gap-5 max-w-md">
         <motion.div animate={{ y:[0,-10,0] }} transition={{ duration:2, repeat:Infinity }}
@@ -704,11 +935,43 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isPaused, phase, sessionEnded]); // eslint-disable-line
 
+  // ── Loading screen while LLM generates questions ─────────────────────────
+  if (loadingQuestions) {
+    return (
+      <div className="fixed inset-0 z-50 bg-cover bg-center flex items-center justify-center"
+           style={{ backgroundImage: `url(${bgImage})` }}>
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1,   opacity: 1 }}
+          className="bg-white/95 backdrop-blur rounded-3xl px-12 py-10 shadow-2xl border-4 border-purple-300 text-center max-w-md"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+            className="text-7xl mb-4 inline-block"
+          >🧠</motion.div>
+          <h2 className="text-3xl font-black text-purple-700 mb-2">Mimi is preparing…</h2>
+          <p className="text-purple-500 text-lg mb-1">Creating fresh <strong>{DIFFICULTY_LABELS[difficulty]}</strong> questions!</p>
+          <p className="text-gray-400 text-sm mb-4">{activity.name}</p>
+          <div className="flex justify-center gap-2 mt-2">
+            {[0,1,2].map(i => (
+              <motion.div key={i}
+                animate={{ y: [0,-10,0] }}
+                transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.2 }}
+                className="w-3 h-3 bg-purple-400 rounded-full"
+              />
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-cover bg-center overflow-hidden" style={{ backgroundImage: `url(${bgImage})` }}>
 
-      {/* Difficulty badge */}
-      <div className="absolute top-6 right-6 z-50">
+      {/* Difficulty badge + question source badge */}
+      <div className="absolute top-6 right-6 z-50 flex flex-col gap-2 items-end">
         <span className={`px-4 py-2 rounded-full text-sm font-black backdrop-blur border-2 ${
           difficulty === 'easy'   ? 'bg-green-400/80 text-white border-green-600' :
           difficulty === 'medium' ? 'bg-yellow-400/80 text-white border-yellow-600' :
@@ -716,6 +979,7 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
         }`}>
           {DIFFICULTY_LABELS[difficulty]}
         </span>
+
       </div>
 
       {/* End confirm dialog */}
@@ -972,9 +1236,16 @@ function MimiActivityOverlay({ activity, difficulty, onStudentDone, onClose }) {
       {/* Mimi video */}
       <div className="absolute bottom-0 right-0 z-30 pointer-events-none">
         <motion.div key={mimiVideo} initial={{ scale:0.8, opacity:0, y:50 }} animate={{ scale:1, opacity:1, y:0 }} transition={{ type:'spring', damping:12, stiffness:100 }}
-          className="w-[460px] h-[460px]" style={{ background:'transparent' }}>
+          className="w-[460px] h-[460px]" style={{ background:'transparent', backgroundColor:'transparent' }}>
           <video key={mimiVideo} src={mimiVideo} autoPlay loop muted playsInline className="w-full h-full object-contain"
-            style={{ isolation:'isolate', mixBlendMode:'normal', filter:'drop-shadow(0 8px 32px rgba(0,0,0,0.4))', background:'transparent' }} />
+            style={{
+              background: 'transparent',
+              backgroundColor: 'transparent',
+              // Remove white fringe from any video that isn't true transparent
+              filter: mimiVideo === mimiHappyVideo
+                ? 'drop-shadow(0 4px 24px rgba(100,0,200,0.3))'
+                : 'drop-shadow(0 4px 24px rgba(100,0,200,0.3))',
+            }} />
         </motion.div>
       </div>
     </div>
@@ -1004,10 +1275,10 @@ const ActivitiesTab = () => {
     { id:6,  name:'Number Counting',    icon:'🔢', category:'Numbers',   avgTime:'12 min', difficulty:'Easy→Hard', studentsCompleted:138, avgScore:4.3, description:'Count objects and recognize numbers 1-10 and beyond' },
     { id:7,  name:'Body Parts',         icon:'👀', category:'Body',      avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Learn body part names from head to toe' },
     { id:8,  name:'Shapes',             icon:'🔷', category:'Shapes',    avgTime:'8 min',  difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Identify and name basic to complex shapes' },
-    { id:9,  name:'Picture Guess',      icon:'🖼️', category:'Guess',     avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Big emoji shown — child guesses the name without text hints' },
-    { id:10, name:'Counting Game',      icon:'🔢', category:'Numbers',   avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Count emoji items on screen — harder levels include addition' },
-    { id:11, name:'Pattern Fun',        icon:'🔴', category:'Patterns',  avgTime:'12 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Complete AB, ABC, skip-count, and mixed patterns' },
-    { id:12, name:'Quiz Mode',          icon:'🏆', category:'Mixed',     avgTime:'15 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Mixed rounds: picture, counting, and pattern challenges' },
+    { id:9,  name:'Picture Guess',      icon:'🖼️', category:'Guess',     avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Big emoji shown — child guesses the name. Fresh AI questions every session!' },
+    { id:10, name:'Counting Game',      icon:'🔢', category:'Numbers',   avgTime:'10 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Count emoji items on screen — harder levels include addition. AI-powered!' },
+    { id:11, name:'Pattern Fun',        icon:'🔴', category:'Patterns',  avgTime:'12 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Complete AB, ABC, skip-count patterns. Fresh AI questions every session!' },
+    { id:12, name:'Quiz Mode',          icon:'🏆', category:'Mixed',     avgTime:'15 min', difficulty:'Easy→Hard', studentsCompleted:0,   avgScore:0,   description:'Mixed quiz from all activities. 15 questions, shuffled every session!' },
   ];
 
   const handleStartActivity = (activity) => {
@@ -1112,9 +1383,14 @@ const ActivitiesTab = () => {
                       <p className="text-sm text-text/60">{activity.category}</p>
                     </div>
                   </div>
-                  {activity.id > 6 && (
-                    <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-black rounded-lg">NEW</span>
-                  )}
+                  <div className="flex flex-col gap-1 items-end">
+                    {activity.id > 6 && (
+                      <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-black rounded-lg">NEW</span>
+                    )}
+                    {activity.id >= 9 && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-black rounded-lg">🤖 AI</span>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-text/70 mb-4">{activity.description}</p>
                 <div className="space-y-2 mb-4">
@@ -1177,6 +1453,15 @@ const ActivitiesTab = () => {
                 <label className="block text-sm font-semibold text-text mb-2">Number of Questions</label>
                 <input type="number" defaultValue={10} className="w-full px-4 py-2 rounded-xl border-2 border-gray-200 focus:border-primary-400" />
               </div>
+              {selectedActivity.id >= 9 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
+                  <p className="text-sm text-blue-800 font-semibold mb-1">🤖 AI-Powered Activity</p>
+                  <p className="text-xs text-blue-600">
+                    This activity generates <strong>fresh questions every session</strong> using AI.
+                    Questions automatically match the selected difficulty level.
+                  </p>
+                </div>
+              )}
               <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
                 <p className="text-sm text-blue-800">ℹ️ These settings will apply the next time this activity is launched.</p>
               </div>

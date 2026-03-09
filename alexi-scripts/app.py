@@ -1,8 +1,7 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# app.py  —  Alexi Backend (Complete)
-# Run from alexi-scripts/ folder:  python app.py
-# ─────────────────────────────────────────────────────────────────────────────
-
+# =============================================================================
+# app.py — Alexi Backend (Complete)
+# Run from alexi-scripts/ folder: python app.py
+# =============================================================================
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import threading
@@ -11,7 +10,7 @@ import re
 import os
 import csv
 
-# ── Face Recognition System (your original) ───────────────────────────────────
+# ── Face Recognition System (your original) ──────────────────────────────────
 try:
     from face_detection.face_detection import FaceRecognitionSystem
 except Exception:
@@ -20,7 +19,7 @@ except Exception:
 # ── Mimi LLM Session (your original) ─────────────────────────────────────────
 from mimi_llm_session import MimiLLMSession
 
-# ── LLM clients for /activity-check ──────────────────────────────────────────
+# ── LLM clients ───────────────────────────────────────────────────────────────
 try:
     import openai
     _openai_available = True
@@ -33,53 +32,81 @@ try:
 except ImportError:
     _anthropic_available = False
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CONFIG  — set your API keys here OR use environment variables
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# CONFIG — set your API keys here OR use environment variables
+# =============================================================================
 OPENAI_API_KEY    = os.environ.get("OPENAI_API_KEY",    "YOUR_OPENAI_KEY_HERE")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "YOUR_ANTHROPIC_KEY_HERE")
 
 # Local file to store activity results (no MongoDB needed)
 RESULTS_FILE = os.path.join(os.path.dirname(__file__), "activity_results.json")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # FLASK APP
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 app = Flask(__name__)
 CORS(app)
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # YOUR ORIGINAL SYSTEMS — unchanged
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 system      = FaceRecognitionSystem()
 mimi_system = MimiLLMSession()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LLM HELPERS for /activity-check
-# ─────────────────────────────────────────────────────────────────────────────
-def _call_openai(prompt: str) -> dict:
+# =============================================================================
+# LLM HELPERS — used by /activity-check AND /generate-activity-questions
+# =============================================================================
+def _call_openai(prompt: str, max_tokens: int = 200) -> dict:
     if not _openai_available:
         raise RuntimeError("openai not installed")
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=200,
+        max_tokens=max_tokens,
         temperature=0.2,
     )
     return _parse_json(resp.choices[0].message.content)
 
 
-def _call_anthropic(prompt: str) -> dict:
+def _call_openai_raw(prompt: str, max_tokens: int = 1000, temperature: float = 1.0) -> str:
+    """Returns raw text (no JSON parse) — used for question generation. High temp = max variety."""
+    if not _openai_available:
+        raise RuntimeError("openai not installed")
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    return resp.choices[0].message.content
+
+
+def _call_anthropic(prompt: str, max_tokens: int = 200) -> dict:
     if not _anthropic_available:
         raise RuntimeError("anthropic not installed")
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     resp = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=200,
+        max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}],
     )
     return _parse_json(resp.content[0].text)
+
+
+def _call_anthropic_raw(prompt: str, max_tokens: int = 1000, temperature: float = 1.0) -> str:
+    """Returns raw text (no JSON parse) — used for question generation. High temp = max variety."""
+    if not _anthropic_available:
+        raise RuntimeError("anthropic not installed")
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    resp = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=max_tokens,
+        temperature=temperature,           # <-- was missing before, now passed
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return resp.content[0].text
 
 
 def _parse_json(text: str) -> dict:
@@ -89,24 +116,20 @@ def _parse_json(text: str) -> dict:
 
 def _build_prompt(word, child_said, activity_name, student_name):
     return f"""You are a friendly AI teacher checking if a child said a word correctly.
-
 Activity: {activity_name}
 Target word: {word}
 Child said: "{child_said}"
 Child name: {student_name}
-
 Rules:
 - Accept minor pronunciation differences (e.g. "aipple" for "apple" is OK)
 - Accept if child said the word correctly even with extra words
 - Be encouraging
-
 Respond ONLY with valid JSON (no markdown):
 {{"correct": true/false, "feedback": "short encouraging message max 15 words", "hint": "optional hint if wrong"}}"""
 
-
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # ACTIVITY RESULTS FILE HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 def load_results() -> list:
     try:
         if os.path.exists(RESULTS_FILE):
@@ -124,13 +147,112 @@ def save_results(data: list):
     except Exception as e:
         print(f"[save_results] error: {e}")
 
+# =============================================================================
+# QUESTION GENERATION PROMPTS — per activity, per difficulty
+# =============================================================================
+QUESTION_PROMPTS = {
+    9: {
+        "easy": (
+            "Generate {count} picture-guess questions for preschool children (easy level, age 3-5). "
+            "Use very common animals and fruits a 3-year-old knows (cat, dog, apple, banana, cow, duck etc). "
+            "For each question: one emoji is shown, child must say the word aloud. "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"emoji":"🐱","answer":"Cat"}}, {{"emoji":"🍎","answer":"Apple"}}, ...]'
+        ),
+        "medium": (
+            "Generate {count} picture-guess questions for preschool children (medium level, age 4-5). "
+            "Use less-common animals, vegetables, transport items (fox, deer, carrot, bus, boat etc). "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"emoji":"🦊","answer":"Fox"}}, {{"emoji":"🥕","answer":"Carrot"}}, ...]'
+        ),
+        "hard": (
+            "Generate {count} picture-guess questions for preschool children (hard level, age 5+). "
+            "Use harder items: professions, space, weather, tools, less-common animals "
+            "(astronaut, rainbow, hammer, penguin, helicopter etc). "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"emoji":"🌈","answer":"Rainbow"}}, {{"emoji":"🔨","answer":"Hammer"}}, ...]'
+        ),
+    },
+    10: {
+        "easy": (
+            "Generate {count} counting questions for preschool children (easy, count 1-5 items). "
+            "Each question shows ONE type of emoji repeated 1 to 5 times. "
+            "Use fun emojis: fruits, animals, stars, balls. "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"display":"🍎🍎🍎","answer":"3","count":3}}, {{"display":"⭐⭐","answer":"2","count":2}}, ...]'
+        ),
+        "medium": (
+            "Generate {count} counting questions for preschool children (medium, count 6-10 items). "
+            "Each question shows ONE emoji repeated 6 to 10 times. "
+            "Use different emojis for each question. "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"display":"🐶🐶🐶🐶🐶🐶🐶","answer":"7","count":7}}, ...]'
+        ),
+        "hard": (
+            "Generate {count} emoji addition problems for preschool children (hard level). "
+            "Show two groups of the SAME emoji separated by +, total between 5 and 10. "
+            "Use a different emoji for each question. "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"display":"🍎🍎🍎 + 🍎🍎","answer":"5","addend1":3,"addend2":2}}, ...]'
+        ),
+    },
+    11: {
+        "easy": (
+            "Generate {count} simple AB repeating pattern questions for preschool children (easy level). "
+            "Use 2-element color emoji or shape emoji patterns. Show 3-4 elements then ?. "
+            "The answer should be a single English word (color or shape name). "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"pattern":"🔴 → 🔵 → 🔴 → ?","answer":"Blue","hint":"Blue"}}, ...]'
+        ),
+        "medium": (
+            "Generate {count} pattern completion questions for preschool children (medium level). "
+            "Mix of: ABC emoji patterns, simple number sequences (1,2,3,?), and (5,4,3,?). "
+            "The answer should be a word (color name or number word like Four, Two). "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"pattern":"1 → 2 → 3 → ?","answer":"Four","hint":"Four"}}, '
+            '{{"pattern":"🟢 → 🟡 → 🔴 → ?","answer":"Green","hint":"Green"}}, ...]'
+        ),
+        "hard": (
+            "Generate {count} hard pattern completion questions for preschool children (hard level). "
+            "Include: skip-counting by 2s or 3s (2,4,6,8,?), decreasing sequences (10,8,6,4,?), "
+            "and multiplication patterns (3,6,9,12,?). Answers must be number words (Eight, Ten, Fifteen etc). "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"pattern":"2 → 4 → 6 → 8 → ?","answer":"Ten","hint":"Ten"}}, ...]'
+        ),
+    },
+    12: {
+        "easy": (
+            "Generate {count} mixed quiz questions for preschool children (easy level). "
+            "Mix of types — include at least one of each: "
+            "picture-guess (common animal/fruit emoji), word (child says the word shown), "
+            "pattern (simple AB). Use easy vocabulary only. "
+            "Return ONLY a valid JSON array, no markdown, no extra text. Use these exact type formats: "
+            '[{{"type":"picture","emoji":"🐱","answer":"Cat"}}, '
+            '{{"type":"word","word":"Dog","emoji":"🐶"}}, '
+            '{{"type":"pattern","pattern":"🔴→🔵→🔴→?","answer":"Red","hint":"Red"}}, ...]'
+        ),
+        "medium": (
+            "Generate {count} mixed quiz questions for preschool children (medium level). "
+            "Mix of: picture-guess (less-common animals), counting (6-10 items), pattern (ABC or number sequence). "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"type":"picture","emoji":"🦁","answer":"Lion"}}, '
+            '{{"type":"count","display":"🌟🌟🌟🌟🌟🌟🌟","answer":"7","count":7}}, '
+            '{{"type":"pattern","pattern":"1→2→3→?","answer":"Four","hint":"Four"}}, ...]'
+        ),
+        "hard": (
+            "Generate {count} mixed quiz questions for preschool children (hard level). "
+            "Mix of: hard picture-guess (vehicles, professions, weather), addition counting, skip-count patterns. "
+            "Return ONLY a valid JSON array, no markdown, no extra text: "
+            '[{{"type":"picture","emoji":"🚁","answer":"Helicopter"}}, '
+            '{{"type":"count","display":"⭐⭐⭐ + ⭐⭐⭐⭐","answer":"7","addend1":3,"addend2":4}}, '
+            '{{"type":"pattern","pattern":"3→6→9→?","answer":"Twelve","hint":"Twelve"}}, ...]'
+        ),
+    },
+}
 
-# ═════════════════════════════════════════════════════════════════════════════
-# ROUTES
-# ═════════════════════════════════════════════════════════════════════════════
-
-# ── YOUR ORIGINAL ROUTES (unchanged) ─────────────────────────────────────────
-
+# =============================================================================
+# ROUTES — YOUR ORIGINAL ROUTES (unchanged)
+# =============================================================================
 @app.route('/start-classroom', methods=['GET'])
 def start_classroom():
     try:
@@ -188,8 +310,9 @@ def mimi_get():
         return jsonify({'error': str(e)}), 500
 
 
-# ── NEW ROUTES for Activities feature ────────────────────────────────────────
-
+# =============================================================================
+# ROUTES — ACTIVITY ROUTES
+# =============================================================================
 @app.route('/activity-check', methods=['POST'])
 def activity_check():
     """
@@ -198,36 +321,131 @@ def activity_check():
     Returns: { result: { correct, feedback, hint } }
     """
     try:
-        data          = request.get_json() or {}
-        word          = data.get("word", "")
-        child_said    = data.get("child_said", "")
+        data         = request.get_json() or {}
+        word         = data.get("word", "")
+        child_said   = data.get("child_said", "")
         activity_name = data.get("activity_name", "Word Practice")
-        student_name  = data.get("student_name", "Student")
+        student_name = data.get("student_name", "Student")
 
         prompt = _build_prompt(word, child_said, activity_name, student_name)
 
-        # Try OpenAI → Anthropic → simple fallback
         result = None
         try:
             result = _call_openai(prompt)
         except Exception as e1:
             print(f"[activity-check] OpenAI failed: {e1}")
+        if result is None:
             try:
                 result = _call_anthropic(prompt)
             except Exception as e2:
                 print(f"[activity-check] Anthropic failed: {e2}")
-
         if result is None:
-            ok     = child_said.lower().strip() in word.lower()
+            ok = child_said.lower().strip() in word.lower()
             result = {
                 "correct":  ok,
                 "feedback": f"Great job! {word} is correct!" if ok else f"Try again! The word is {word}",
                 "hint":     "" if ok else f"Say it slowly: {word}",
             }
-
         return jsonify({"result": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/generate-activity-questions', methods=['POST'])
+def generate_activity_questions():
+    """
+    Generate fresh LLM questions for activities 9-12.
+    Body: { activity_id, difficulty, count, session_seed }
+    Returns: { questions: [...] }
+
+    Activity 9  — Picture Guess   → [{ emoji, answer }, ...]
+    Activity 10 — Counting Game   → [{ display, answer, count } or { display, answer, addend1, addend2 }, ...]
+    Activity 11 — Pattern Fun     → [{ pattern, answer, hint }, ...]
+    Activity 12 — Quiz Mode       → [{ type, ...fields }, ...]
+    """
+    try:
+        data         = request.get_json() or {}
+        activity_id  = int(data.get("activity_id", 9))
+        difficulty   = data.get("difficulty", "easy")   # easy | medium | hard
+        count        = int(data.get("count", 6))
+        session_seed = data.get("session_seed", "")     # random seed from frontend
+
+        print(f"\n{'='*60}")
+        print(f"[generate-questions] REQUEST: activity={activity_id}, difficulty={difficulty}, count={count}, seed={session_seed}")
+        print(f"[generate-questions] OpenAI available: {_openai_available}, key set: {OPENAI_API_KEY != 'YOUR_OPENAI_KEY_HERE'}")
+        print(f"[generate-questions] Anthropic available: {_anthropic_available}, key set: {ANTHROPIC_API_KEY != 'YOUR_ANTHROPIC_KEY_HERE'}")
+
+        # Validate
+        if activity_id not in QUESTION_PROMPTS:
+            return jsonify({"questions": [], "error": "activity_id must be 9, 10, 11, or 12"}), 400
+        if difficulty not in ("easy", "medium", "hard"):
+            difficulty = "easy"
+
+        prompt_template = QUESTION_PROMPTS[activity_id][difficulty]
+        # Inject session_seed so every LLM call gets a slightly different prompt → different questions
+        seed_line = f"\n\nIMPORTANT: Session ID is '{session_seed}'. Generate COMPLETELY DIFFERENT questions than last time. Do NOT repeat previous answers."
+        prompt = prompt_template.format(count=count) + seed_line
+
+        print(f"[generate-questions] Prompt length: {len(prompt)} chars")
+
+        # Try OpenAI first, then Anthropic
+        raw = None
+        used_provider = None
+
+        try:
+            if _openai_available and OPENAI_API_KEY != "YOUR_OPENAI_KEY_HERE":
+                print("[generate-questions] Trying OpenAI...")
+                raw = _call_openai_raw(prompt, max_tokens=1000, temperature=1.0)
+                used_provider = "OpenAI"
+                print(f"[generate-questions] OpenAI responded, raw length={len(raw)}")
+                print(f"[generate-questions] OpenAI raw (first 300): {raw[:300]}")
+            else:
+                print("[generate-questions] OpenAI skipped (not available or key not set)")
+        except Exception as e1:
+            print(f"[generate-questions] OpenAI FAILED: {type(e1).__name__}: {e1}")
+
+        if not raw:
+            try:
+                if _anthropic_available and ANTHROPIC_API_KEY != "YOUR_ANTHROPIC_KEY_HERE":
+                    print("[generate-questions] Trying Anthropic...")
+                    raw = _call_anthropic_raw(prompt, max_tokens=1000, temperature=1.0)
+                    used_provider = "Anthropic"
+                    print(f"[generate-questions] Anthropic responded, raw length={len(raw)}")
+                    print(f"[generate-questions] Anthropic raw (first 300): {raw[:300]}")
+                else:
+                    print("[generate-questions] Anthropic skipped (not available or key not set)")
+            except Exception as e2:
+                print(f"[generate-questions] Anthropic FAILED: {type(e2).__name__}: {e2}")
+
+        if not raw:
+            print("[generate-questions] BOTH LLMs failed — returning empty (frontend will use static fallback)")
+            return jsonify({
+                "questions": [],
+                "error": "LLM unavailable — check your API keys in app.py or environment variables"
+            }), 200
+
+        # Parse the JSON array out of the response
+        try:
+            clean = re.sub(r"```[a-z]*", "", raw).replace("```", "").strip()
+            start = clean.find('[')
+            end   = clean.rfind(']')
+            if start != -1 and end != -1 and end > start:
+                questions = json.loads(clean[start:end + 1])
+                print(f"[generate-questions] SUCCESS via {used_provider}: parsed {len(questions)} questions")
+                for i, q in enumerate(questions):
+                    print(f"  Q{i+1}: {q}")
+                return jsonify({"questions": questions})
+            else:
+                print(f"[generate-questions] No JSON array brackets found in response: {raw[:500]}")
+        except Exception as pe:
+            print(f"[generate-questions] JSON parse error: {type(pe).__name__}: {pe}")
+            print(f"[generate-questions] Raw that failed to parse: {raw[:500]}")
+
+        return jsonify({"questions": [], "error": f"Parse failed from {used_provider} — check server logs"}), 200
 
     except Exception as e:
+        print(f"[generate-questions] Unexpected error: {type(e).__name__}: {e}")
+        import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
@@ -246,7 +464,7 @@ def save_activity_result():
             "student_name":  data.get("student_name",  "Student"),
             "activity_id":   data.get("activity_id",   0),
             "activity_name": data.get("activity_name", "Activity"),
-            "stars":         min(5, max(0, int(data.get("stars", 0)))),
+            "stars":         min(5, max(0, int(data.get("stars",  0)))),
             "score":         int(data.get("score", 0)),
             "timestamp":     datetime.now().isoformat(),
             "date":          datetime.now().strftime("%a %b %d %Y"),
@@ -268,10 +486,10 @@ def get_student_stars(student_id):
         results = load_results()
         mine    = [r for r in results if r.get("student_id") == student_id]
         return jsonify({
-            "student_id":  student_id,
-            "total_stars": sum(r.get("stars", 0) for r in mine),
-            "today_stars": sum(r.get("stars", 0) for r in mine if r.get("date") == today),
-            "results":     mine[:20],
+            "student_id":   student_id,
+            "total_stars":  sum(r.get("stars", 0) for r in mine),
+            "today_stars":  sum(r.get("stars", 0) for r in mine if r.get("date") == today),
+            "results":      mine[:20],
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -302,9 +520,9 @@ def get_attendance():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 # MAIN
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 if __name__ == "__main__":
     # debug=False rakhein threading ke waqt, warna camera do baar khul sakta hai
     app.run(debug=False, port=5000, host='0.0.0.0')
